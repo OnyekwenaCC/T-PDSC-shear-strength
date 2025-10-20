@@ -1,4 +1,4 @@
-# TPDSC: Shear strength + E50 
+# T-PDSC: Shear strength + E50 
 
 # ---- Packages ----
 library(readxl)
@@ -9,7 +9,7 @@ library(tidyr)
 
 # ---- User switches ----
 excel_path        <- "strain_data.xlsx"   # input
-export_dir        <- "TPDSC_out_from_excel"
+export_dir        <- "T-PDSC_out_from_excel"
 export_inspection <- FALSE                # Set TRUE for detailed per-sample files
 
 dir.create(export_dir, showWarnings = FALSE)
@@ -37,7 +37,7 @@ df_params <- data.frame(
              1464.8936, 2107.8298, 2513.0015)
 )
 
-# ---- TPDSC Eq. (13) ----
+# ---- T-PDSC Eq. (13) ----
 sigma_tpds <- function(eps, A, B, alpha, F, i, eps0, qf_ref) {
   g <- (A * eps) / (B + eps^alpha)
   h <- 1 - (F / (eps + eps0))
@@ -88,20 +88,20 @@ if (is.finite(max(strain_df$eps, na.rm = TRUE)) &&
   strain_df$eps <- strain_df$eps / 100
 }
 
-# ---- Predict σ–ε at provided strains (TPDSC) ----
+# ---- Predict σ–ε at provided strains (T-PDSC) ----
 pred_df <- strain_df |>
   left_join(df_params, by = c("t","s3")) |>
   mutate(q = sigma_tpds(eps, A, B, alpha, F, i, eps0, qf_ref)) |>
   select(sample_id, t, s3, eps, q)
 
-# ---- Peak detection: qf, ε_peak, and pf (TPDSC) ----
+# ---- Peak detection: qf, ε_peak, and pf (T-PDSC) ----
 peak_tbl <- pred_df |>
   group_by(sample_id, t, s3) |>
   slice_max(q, with_ties = FALSE) |>
   transmute(sample_id, t, s3, qf = q, eps_peak = eps, pf = (qf + 3*s3)/3) |>
   ungroup()
 
-# ---- Secant modulus E50 from pre-peak branch (TPDSC) ----
+# ---- Secant modulus E50 from pre-peak branch (T-PDSC) ----
 E50_tbl <- pred_df |>
   left_join(peak_tbl, by = c("sample_id","t","s3")) |>
   filter(eps <= eps_peak) |>
@@ -124,7 +124,7 @@ peak_E50_tbl <- peak_tbl |>
   left_join(E50_tbl, by = c("sample_id","t","s3")) |>
   relocate(qf, eps_peak, q50, eps50, E50)
 
-# ---- Aggregate pf–qf by (t, s3) for MC fit (TPDSC) ----
+# ---- Aggregate pf–qf by (t, s3) for MC fit (T-PDSC) ----
 pfqf_agg_model <- peak_tbl |>
   group_by(t, s3) |>
   summarise(qf = mean(qf), pf = mean(pf), eps_peak = mean(eps_peak),
@@ -149,7 +149,7 @@ fit_mc_pq_by_time <- function(pfqf) {
   out <- do.call(rbind, lst); rownames(out) <- NULL; out[order(out$t), ]
 }
 
-# ---- Mohr–Coulomb (p–q) - TPDSC model ----
+# ---- Mohr–Coulomb (p–q) - T-PDSC model ----
 mc_fit_model <- fit_mc_pq_by_time(pfqf_agg_model)
 
 # ---- Mohr–Coulomb (p–q) - Experimental (from qf,ref) ----
@@ -163,7 +163,7 @@ mc_fit_exp <- fit_mc_pq_by_time(pfqf_exp)
 if (export_inspection) {
   # combined predictions
   write.csv(pred_df,
-            file.path(export_dir, "TPDSC_sigma_predictions_ALL.csv"),
+            file.path(export_dir, "T-PDSC_sigma_predictions_ALL.csv"),
             row.names = FALSE)
   
   # per (sample_id, t, s3): split and write CSVs
@@ -176,38 +176,39 @@ if (export_inspection) {
   }
 }
 
-# 1) Peaks and E50 per sample (TPDSC)
+# 1) Peaks and E50 per sample (T-PDSC)
 write.csv(peak_E50_tbl |>
             arrange(sample_id, t, s3),
-          file.path(export_dir, "TPDSC_peak_E50_per_sample.csv"),
+          file.path(export_dir, "T-PDSC_peak_E50_per_sample.csv"),
           row.names = FALSE)
 
-# 2) Aggregated pf–qf (TPDSC) for MC fits
+# 2) Aggregated pf–qf (T-PDSC) for MC fits
 write.csv(pfqf_agg_model |>
             arrange(t, s3),
-          file.path(export_dir, "TPDSC_peak_pf_qf_aggregated.csv"),
+          file.path(export_dir, "T-PDSC_peak_pf_qf_aggregated.csv"),
           row.names = FALSE)
 
 # 3) Mohr–Coulomb (p–q) summaries - model and experimental
 write.csv(mc_fit_model,
-          file.path(export_dir, "TPDSC_MC_fit_summary_MODEL_pq.csv"),
+          file.path(export_dir, "T-PDSC_MC_fit_summary_MODEL_pq.csv"),
           row.names = FALSE)
 
 write.csv(mc_fit_exp,
-          file.path(export_dir, "TPDSC_MC_fit_summary_EXPERIMENTAL_pq.csv"),
+          file.path(export_dir, "T-PDSC_MC_fit_summary_EXPERIMENTAL_pq.csv"),
           row.names = FALSE)
 
 # ---- Console summary ----
-cat("\n--- Peak & E50 (per sample, TPDSC) ---\n")
+cat("\n--- Peak & E50 (per sample, T-PDSC) ---\n")
 print(peak_E50_tbl |>
         arrange(sample_id, t, s3))
 
-cat("\n--- Aggregated pf–qf (TPDSC, for MC) ---\n")
+cat("\n--- Aggregated pf–qf (T-PDSC, for MC) ---\n")
 print(pfqf_agg_model |>
         arrange(t, s3))
 
-cat("\n--- Mohr–Coulomb (p–q) — TPDSC model ---\n")
+cat("\n--- Mohr–Coulomb (p–q) — T-PDSC model ---\n")
 print(mc_fit_model)
 
 cat("\n--- Mohr–Coulomb (p–q) — EXPERIMENTAL ---\n")
+
 print(mc_fit_exp)
